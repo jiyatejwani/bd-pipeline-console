@@ -1,0 +1,475 @@
+<title>BD Pipeline Console</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+/* Layout: full-bleed command-center dashboard — static topbar, KPI rail split by hairlines, flat bordered panels (no cards), a sortable deals table. Dark-first with light toggle. */
+:root{
+  /* dark (default) */
+  --bg:#0e1016; --bg-2:#141822; --panel:#161b26; --panel-2:#1b212e;
+  --border:#262d3b; --border-2:#333c4d;
+  --fg:#eef1f7; --fg-dim:#b6bece; --fg-faint:#909aac;
+  --accent:#7b8cff; --accent-soft:rgba(123,140,255,.16);
+  --won:#35d39a; --won-soft:rgba(53,211,154,.15);
+  --lost:#fb7389; --lost-soft:rgba(251,115,137,.15);
+  --warn:#f5b23d; --warn-soft:rgba(245,178,61,.15);
+  --info:#5fa8f5; --info-soft:rgba(95,168,245,.15);
+  --grid:rgba(255,255,255,.07);
+  --font-display:'Archivo',system-ui,-apple-system,Segoe UI,sans-serif;
+  --font-body:'IBM Plex Sans',system-ui,-apple-system,Segoe UI,sans-serif;
+  --font-mono:'IBM Plex Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+  color-scheme:dark;
+}
+@media (prefers-color-scheme:light){
+  :root:not([data-theme="dark"]){
+    --bg:#f5f6f9; --bg-2:#eef0f5; --panel:#ffffff; --panel-2:#f8f9fc;
+    --border:#e3e6ee; --border-2:#d3d8e4;
+    --fg:#141822; --fg-dim:#49536c; --fg-faint:#6f7a90;
+    --accent:#4d5de6; --accent-soft:rgba(77,93,230,.1);
+    --won:#0f9d6b; --won-soft:rgba(15,157,107,.12);
+    --lost:#d94863; --lost-soft:rgba(217,72,99,.12);
+    --warn:#c7881a; --warn-soft:rgba(199,136,26,.14);
+    --info:#2c7bd4; --info-soft:rgba(44,123,212,.12);
+    --grid:rgba(20,26,40,.08);
+    color-scheme:light;
+  }
+}
+:root[data-theme="light"]{
+  --bg:#f5f6f9; --bg-2:#eef0f5; --panel:#ffffff; --panel-2:#f8f9fc;
+  --border:#e3e6ee; --border-2:#d3d8e4;
+  --fg:#141822; --fg-dim:#49536c; --fg-faint:#6f7a90;
+  --accent:#4d5de6; --accent-soft:rgba(77,93,230,.1);
+  --won:#0f9d6b; --won-soft:rgba(15,157,107,.12);
+  --lost:#d94863; --lost-soft:rgba(217,72,99,.12);
+  --warn:#c7881a; --warn-soft:rgba(199,136,26,.14);
+  --info:#2c7bd4; --info-soft:rgba(44,123,212,.12);
+  --grid:rgba(20,26,40,.08);
+  color-scheme:light;
+}
+:root[data-theme="dark"]{
+  --bg:#0e1016; --bg-2:#141822; --panel:#161b26; --panel-2:#1b212e;
+  --border:#262d3b; --border-2:#333c4d;
+  --fg:#eef1f7; --fg-dim:#b6bece; --fg-faint:#909aac;
+  --accent:#7b8cff; --accent-soft:rgba(123,140,255,.16);
+  --won:#35d39a; --won-soft:rgba(53,211,154,.15);
+  --lost:#fb7389; --lost-soft:rgba(251,115,137,.15);
+  --warn:#f5b23d; --warn-soft:rgba(245,178,61,.15);
+  --info:#5fa8f5; --info-soft:rgba(95,168,245,.15);
+  --grid:rgba(255,255,255,.07);
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--font-body);line-height:1.5;-webkit-font-smoothing:antialiased}
+h1,h2,h3{margin:0;font-family:var(--font-display);font-weight:700;letter-spacing:-.01em;line-height:1.15}
+.mono{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
+[hidden]{display:none!important}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+button{font:inherit;color:inherit;cursor:pointer;background:none;border:none}
+
+.wrap{max-width:1220px;margin:0 auto;padding:0 max(16px,env(safe-area-inset-right,0px)) 40px max(16px,env(safe-area-inset-left,0px))}
+
+/* ---- topbar ---- */
+.topbar{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;padding:26px 0 18px;border-bottom:1px solid var(--border)}
+.brand{display:flex;flex-direction:column;gap:5px}
+.brand .eyebrow{font-family:var(--font-mono);font-size:.73rem;letter-spacing:.16em;text-transform:uppercase;color:var(--accent)}
+.brand h1{font-size:clamp(1.4rem,3.2vw,1.9rem)}
+.brand .sub{color:var(--fg-dim);font-size:.9rem}
+.topbar-right{display:flex;align-items:center;gap:14px}
+.asof{font-family:var(--font-mono);font-size:.79rem;color:var(--fg-dim);text-align:right;line-height:1.45}
+.asof b{color:var(--fg-dim);font-weight:500}
+.theme-btn{display:flex;align-items:center;gap:7px;padding:8px 13px;border:1px solid var(--border-2);border-radius:7px;color:var(--fg-dim);font-size:.82rem;font-weight:500;transition:border-color .15s,color .15s}
+.theme-btn:hover{border-color:var(--accent);color:var(--fg)}
+.theme-btn svg{width:15px;height:15px}
+
+/* ---- KPI rail ---- */
+.kpis{display:grid;grid-template-columns:repeat(6,1fr);margin:0;border-bottom:1px solid var(--border)}
+.kpi{padding:20px 20px 20px 0;border-left:1px solid var(--border);padding-left:20px}
+.kpi:first-child{border-left:none;padding-left:0}
+.kpi .k-label{font-size:.76rem;letter-spacing:.07em;text-transform:uppercase;color:var(--fg-dim);font-weight:600;margin-bottom:9px}
+.kpi .k-val{font-family:var(--font-mono);font-variant-numeric:tabular-nums;font-size:1.5rem;font-weight:600;letter-spacing:-.02em;color:var(--fg);line-height:1}
+.kpi .k-val .unit{font-size:.9rem;color:var(--fg-dim);font-weight:500}
+.kpi .k-sub{font-size:.83rem;color:var(--fg-dim);margin-top:7px;display:flex;align-items:center;gap:5px}
+.delta-up{color:var(--won)} .delta-down{color:var(--lost)}
+
+/* ---- sections ---- */
+.section{margin-top:34px}
+.sec-head{display:flex;align-items:baseline;gap:12px;margin-bottom:16px}
+.sec-head .eyebrow{font-family:var(--font-mono);font-size:.73rem;letter-spacing:.14em;text-transform:uppercase;color:var(--accent)}
+.sec-head h2{font-size:1.15rem;font-weight:700}
+.sec-head .note{margin-left:auto;font-size:.85rem;color:var(--fg-dim)}
+
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.grid-3{display:grid;grid-template-columns:1.1fr 1fr 1fr;gap:16px}
+.panel{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:18px 18px 16px}
+.panel h3{font-size:.95rem;font-weight:600;font-family:var(--font-body);color:var(--fg)}
+.panel .p-sub{font-size:.83rem;color:var(--fg-dim);margin:3px 0 12px}
+.chart-box{position:relative;height:250px}
+.chart-box.tall{height:290px}
+
+/* weighted pipeline highlight */
+.forecast{display:flex;flex-direction:column;justify-content:center;gap:4px}
+.forecast .big{font-family:var(--font-mono);font-size:2.1rem;font-weight:600;letter-spacing:-.02em;color:var(--accent)}
+.forecast .big .unit{font-size:1rem;color:var(--fg-dim)}
+.forecast .cmp{font-size:.82rem;color:var(--fg-dim)}
+.forecast .cmp b{color:var(--fg);font-family:var(--font-mono);font-weight:500}
+.prob-list{margin-top:14px;display:flex;flex-direction:column;gap:7px}
+.prob-row{display:flex;align-items:center;justify-content:space-between;font-size:.78rem;color:var(--fg-dim)}
+.prob-row .mono{color:var(--fg)}
+.prob-dot{display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:8px;vertical-align:middle}
+
+/* ---- deals table ---- */
+.table-tools{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:14px}
+.filter-btn{padding:6px 12px;border:1px solid var(--border-2);border-radius:999px;font-size:.78rem;font-weight:500;color:var(--fg-dim);transition:.15s}
+.filter-btn:hover{border-color:var(--accent);color:var(--fg)}
+.filter-btn.active{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}
+.filter-count{margin-left:auto;font-size:.78rem;color:var(--fg-faint);font-family:var(--font-mono)}
+.table-scroll{overflow-x:auto;border:1px solid var(--border);border-radius:8px;background:var(--panel)}
+table{width:100%;border-collapse:collapse;min-width:720px}
+thead th{text-align:left;font-size:.73rem;letter-spacing:.06em;text-transform:uppercase;color:var(--fg-faint);font-weight:600;padding:13px 16px;border-bottom:1px solid var(--border);white-space:nowrap}
+thead th.num{text-align:right}
+tbody td{padding:13px 16px;border-bottom:1px solid var(--border);font-size:.87rem;color:var(--fg);vertical-align:middle}
+tbody tr:last-child td{border-bottom:none}
+tbody tr:hover{background:var(--panel-2)}
+td.num{text-align:right;font-family:var(--font-mono);font-variant-numeric:tabular-nums}
+td .acct{font-weight:600}
+td .svc{font-size:.83rem;color:var(--fg-dim)}
+.stage-pill{display:inline-block;font-size:.77rem;font-weight:600;padding:3px 10px;border-radius:999px;white-space:nowrap}
+.s-lead{background:var(--info-soft);color:var(--info)}
+.s-qualified{background:var(--accent-soft);color:var(--accent)}
+.s-proposal{background:var(--warn-soft);color:var(--warn)}
+.s-negotiation{background:var(--won-soft);color:var(--won)}
+.owner-chip{font-family:var(--font-mono);font-size:.78rem;color:var(--fg-dim)}
+.follow{font-family:var(--font-mono);font-size:.82rem;white-space:nowrap}
+.follow .tag{display:block;font-size:.68rem;font-weight:600;letter-spacing:.04em;text-transform:uppercase;margin-top:2px}
+.follow.overdue{color:var(--lost)} .follow.overdue .tag{color:var(--lost)}
+.follow.soon{color:var(--warn)} .follow.soon .tag{color:var(--warn)}
+.follow.later{color:var(--fg-dim)}
+
+/* ---- footer ---- */
+.foot{margin-top:36px;padding-top:20px;border-top:1px solid var(--border);display:grid;grid-template-columns:1fr 1fr;gap:20px}
+.foot h4{font-family:var(--font-display);font-size:.82rem;letter-spacing:.06em;text-transform:uppercase;color:var(--fg-dim);margin:0 0 10px}
+.foot ul{margin:0;padding-left:18px;color:var(--fg-dim);font-size:.84rem;line-height:1.7}
+.foot .disclaimer{color:var(--fg-dim);font-size:.85rem;line-height:1.65}
+
+@media(max-width:920px){
+  .kpis{grid-template-columns:repeat(3,1fr)}
+  .kpi{border-left:1px solid var(--border);padding-left:18px}
+  .kpi:nth-child(3n+1){border-left:none;padding-left:0}
+  .kpi{padding-top:16px;padding-bottom:16px}
+  .grid-3{grid-template-columns:1fr 1fr}
+  .grid-3 .panel:first-child{grid-column:1/-1}
+}
+@media(max-width:680px){
+  .grid-2,.grid-3{grid-template-columns:1fr}
+  .grid-3 .panel:first-child{grid-column:auto}
+  .kpis{grid-template-columns:repeat(2,1fr)}
+  .kpi:nth-child(3n+1){border-left:1px solid var(--border);padding-left:18px}
+  .kpi:nth-child(2n+1){border-left:none;padding-left:0}
+  .foot{grid-template-columns:1fr}
+}
+@media(prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.js"></script>
+
+<div class="wrap" id="app"></div>
+
+<script>
+/* ======================= DATA (synthetic — tech-services BD motion) ======================= */
+const AS_OF = new Date('2026-10-27T00:00:00');
+const COMPANY = 'Northpeak Technologies';
+
+const STAGE_PROB = { Lead:0.10, Qualified:0.30, Proposal:0.50, Negotiation:0.75 };
+
+// current OPEN pipeline
+const DEALS = [
+  {acct:'Aarna Health',        svc:'AI/ML Solutions',              stage:'Negotiation', value:40, source:'Referral',     owner:'R. Mehta',   follow:'2026-10-27'},
+  {acct:'Ironwood Mfg',        svc:'Custom Software',              stage:'Negotiation', value:36, source:'Cold calling', owner:'R. Mehta',   follow:'2026-10-25'},
+  {acct:'Vaultline Fintech',   svc:'Cybersecurity',                stage:'Negotiation', value:24, source:'Referral',     owner:'J. Tejwani', follow:'2026-10-28'},
+  {acct:'Cobalt Energy',       svc:'Cloud & DevOps',               stage:'Proposal',    value:30, source:'Networking',   owner:'A. Nair',    follow:'2026-10-31'},
+  {acct:'Orbit Media',         svc:'Digital Transformation',       stage:'Proposal',    value:22, source:'Inbound',      owner:'J. Tejwani', follow:'2026-11-01'},
+  {acct:'Nexora Retail',       svc:'ERP / CRM Solutions',          stage:'Proposal',    value:18, source:'LinkedIn',     owner:'R. Mehta',   follow:'2026-10-29'},
+  {acct:'Zephyr Foods',        svc:'ERP / CRM Solutions',          stage:'Proposal',    value:16, source:'Referral',     owner:'A. Nair',    follow:'2026-10-29'},
+  {acct:'BrightCart',          svc:'Website & Web App Dev',        stage:'Proposal',    value:12, source:'Cold calling', owner:'J. Tejwani', follow:'2026-11-02'},
+  {acct:'Meridian Logistics',  svc:'Custom Software',              stage:'Qualified',   value:32, source:'Email',        owner:'A. Nair',    follow:'2026-10-30'},
+  {acct:'Dune Analytics',      svc:'Cloud & DevOps',               stage:'Qualified',   value:28, source:'Networking',   owner:'A. Nair',    follow:'2026-11-04'},
+  {acct:'Lumen Media',         svc:'Mobile App Development',       stage:'Qualified',   value:20, source:'LinkedIn',     owner:'J. Tejwani', follow:'2026-11-05'},
+  {acct:'Pioneer Edu',         svc:'IT Consulting',                stage:'Qualified',   value:14, source:'Email',        owner:'J. Tejwani', follow:'2026-10-26'},
+  {acct:'Trailhead SaaS',      svc:'AI/ML Solutions',              stage:'Lead',        value:11, source:'Inbound',      owner:'R. Mehta',   follow:'2026-11-02'},
+  {acct:'Skyline Realty',      svc:'Business Process Automation',  stage:'Lead',        value:9,  source:'LinkedIn',     owner:'R. Mehta',   follow:'2026-11-03'},
+];
+
+// quarter-to-date funnel
+const FUNNEL = [
+  {stage:'Leads',       n:320},
+  {stage:'Contacted',   n:210},
+  {stage:'Qualified',   n:120},
+  {stage:'Proposal',    n:64},
+  {stage:'Negotiation', n:32},
+  {stage:'Won',         n:18},
+];
+
+// quarter-to-date lead channels
+const SOURCES = [
+  {name:'Referral',    leads:40, won:5},
+  {name:'Inbound',     leads:16, won:2},
+  {name:'LinkedIn',    leads:96, won:5},
+  {name:'Email',       leads:84, won:3},
+  {name:'Networking',  leads:28, won:1},
+  {name:'Cold calling',leads:56, won:2},
+];
+
+// 6-month trend (revenue = closed-won ₹L)
+const MONTHLY = [
+  {m:'May', leads:78,  rev:52, target:60},
+  {m:'Jun', leads:92,  rev:61, target:60},
+  {m:'Jul', leads:85,  rev:48, target:65},
+  {m:'Aug', leads:104, rev:72, target:65},
+  {m:'Sep', leads:118, rev:69, target:70},
+  {m:'Oct', leads:96,  rev:58, target:70},
+];
+
+/* ======================= DERIVED METRICS (computed, not hardcoded) ======================= */
+const fmtL = v => '₹'+ (Math.round(v*10)/10) ;
+const daysBetween = (a,b)=>Math.round((a-b)/86400000);
+
+const openPipeline = DEALS.reduce((s,d)=>s+d.value,0);
+const weighted = DEALS.reduce((s,d)=>s+d.value*STAGE_PROB[d.stage],0);
+const openCount = DEALS.length;
+const avgDeal = openPipeline/openCount;
+DEALS.forEach(d=>{ d.dueIn = daysBetween(new Date(d.follow+'T00:00:00'), AS_OF); });
+const followDue = DEALS.filter(d=>d.dueIn<=2).length;
+const overdue = DEALS.filter(d=>d.dueIn<0).length;
+
+const wonQTD = FUNNEL.find(f=>f.stage==='Won').n;
+const leadsQTD = FUNNEL.find(f=>f.stage==='Leads').n;
+const qualifiedQTD = FUNNEL.find(f=>f.stage==='Qualified').n;
+const lostQTD = 14;
+const winRate = Math.round(wonQTD/(wonQTD+lostQTD)*100);
+const convRate = (wonQTD/leadsQTD*100);
+
+// current quarter = Aug+Sep+Oct
+const q = MONTHLY.slice(-3);
+const revQTD = q.reduce((s,r)=>s+r.rev,0);
+const tgtQTD = q.reduce((s,r)=>s+r.target,0);
+const revDeltaPct = Math.round((revQTD-tgtQTD)/tgtQTD*100);
+
+// service-line pipeline from deals
+const byService = {};
+DEALS.forEach(d=>{ byService[d.svc]=(byService[d.svc]||0)+d.value; });
+const serviceRows = Object.entries(byService).sort((a,b)=>b[1]-a[1]);
+
+// source conversion
+SOURCES.forEach(s=>{ s.conv = s.leads? (s.won/s.leads*100):0; });
+const sourceByConv = [...SOURCES].sort((a,b)=>b.conv-a.conv);
+
+/* ======================= STATE ======================= */
+const STAGES=['All','Lead','Qualified','Proposal','Negotiation'];
+let activeStage='All';
+let themePref=null;
+try{themePref=localStorage.getItem('bd-theme');}catch(e){}
+if(themePref==='light'||themePref==='dark') document.documentElement.setAttribute('data-theme',themePref);
+
+const app=document.getElementById('app');
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+let charts=[];
+
+function currentTheme(){
+  const a=document.documentElement.getAttribute('data-theme');
+  if(a) return a;
+  return window.matchMedia('(prefers-color-scheme:light)').matches?'light':'dark';
+}
+function cssVar(n){return getComputedStyle(document.documentElement).getPropertyValue(n).trim();}
+
+/* ======================= RENDER ======================= */
+function sunIcon(){return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>';}
+function moonIcon(){return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>';}
+
+function kpiStrip(){
+  const items=[
+    {l:'Open pipeline', v:fmtL(openPipeline), u:'L', sub:`${openCount} active deals · ₹${(openPipeline/100).toFixed(2)} Cr`},
+    {l:'Weighted', v:fmtL(Math.round(weighted)), u:'L', sub:'forecast · stage-adjusted'},
+    {l:'Win rate', v:winRate, u:'%', sub:`${wonQTD} won / ${lostQTD} lost · QTD`},
+    {l:'Avg deal size', v:fmtL(avgDeal), u:'L', sub:'across open pipeline'},
+    {l:'Qualified leads', v:qualifiedQTD, u:'', sub:`${convRate.toFixed(1)}% lead→win · QTD`},
+    {l:'Revenue vs target', v:fmtL(revQTD), u:'L', sub:`of ₹${tgtQTD}L · ${revDeltaPct>=0?'+':''}${revDeltaPct}%`, delta:revDeltaPct>=0?'up':'down'},
+  ];
+  return `<div class="kpis">${items.map(it=>`
+    <div class="kpi">
+      <div class="k-label">${it.l}</div>
+      <div class="k-val">${it.v}${it.u?`<span class="unit">${it.u}</span>`:''}</div>
+      <div class="k-sub ${it.delta?('delta-'+it.delta):''}">${esc(it.sub)}</div>
+    </div>`).join('')}</div>`;
+}
+
+function dealRows(){
+  let rows=DEALS.filter(d=>activeStage==='All'||d.stage===activeStage);
+  rows.sort((a,b)=>a.dueIn-b.dueIn);
+  return rows.map(d=>{
+    const cls=d.dueIn<0?'overdue':d.dueIn<=2?'soon':'later';
+    const tag=d.dueIn<0?`${Math.abs(d.dueIn)}d overdue`:d.dueIn===0?'today':d.dueIn<=2?`in ${d.dueIn}d`:'';
+    const dt=new Date(d.follow+'T00:00:00').toLocaleDateString('en-GB',{day:'2-digit',month:'short'});
+    return `<tr>
+      <td><span class="acct">${esc(d.acct)}</span><div class="svc">${esc(d.svc)}</div></td>
+      <td><span class="stage-pill s-${d.stage.toLowerCase()}">${d.stage}</span></td>
+      <td class="num">${d.value}</td>
+      <td><span class="owner-chip">${esc(d.source)}</span></td>
+      <td><span class="owner-chip">${esc(d.owner)}</span></td>
+      <td><span class="follow ${cls}">${dt}${tag?`<span class="tag">${tag}</span>`:''}</span></td>
+    </tr>`;
+  }).join('');
+}
+
+function render(){
+  charts.forEach(c=>{try{c.destroy()}catch(e){}});charts=[];
+  const th=currentTheme();
+  app.innerHTML=`
+  <header class="topbar">
+    <div class="brand">
+      <span class="eyebrow">Business Development · Sales Operations</span>
+      <h1>${esc(COMPANY)} — Pipeline Console</h1>
+      <span class="sub">Lead-to-close pipeline across IT &amp; software service lines</span>
+    </div>
+    <div class="topbar-right">
+      <div class="asof"><b>Quarter to date</b><br>As of 27 Oct 2026</div>
+      <button class="theme-btn" id="themeBtn">${th==='dark'?sunIcon()+'Light':moonIcon()+'Dark'}</button>
+    </div>
+  </header>
+
+  ${kpiStrip()}
+
+  <section class="section">
+    <div class="sec-head"><span class="eyebrow">01</span><h2>Pipeline health</h2><span class="note">where revenue is sitting right now</span></div>
+    <div class="grid-3">
+      <div class="panel">
+        <h3>Conversion funnel</h3>
+        <div class="p-sub">Lead → closed, quarter to date</div>
+        <div class="chart-box"><canvas id="funnelChart"></canvas></div>
+      </div>
+      <div class="panel forecast">
+        <h3 style="margin-bottom:10px">Forecast-weighted value</h3>
+        <div class="big">${fmtL(Math.round(weighted))}<span class="unit">L</span></div>
+        <div class="cmp">of <b>${fmtL(openPipeline)}L</b> open · ${Math.round(weighted/openPipeline*100)}% probability-adjusted</div>
+        <div class="prob-list">
+          <div class="prob-row"><span><span class="prob-dot" style="background:var(--info)"></span>Lead</span><span class="mono">10%</span></div>
+          <div class="prob-row"><span><span class="prob-dot" style="background:var(--accent)"></span>Qualified</span><span class="mono">30%</span></div>
+          <div class="prob-row"><span><span class="prob-dot" style="background:var(--warn)"></span>Proposal</span><span class="mono">50%</span></div>
+          <div class="prob-row"><span><span class="prob-dot" style="background:var(--won)"></span>Negotiation</span><span class="mono">75%</span></div>
+        </div>
+      </div>
+      <div class="panel">
+        <h3>Pipeline by service line</h3>
+        <div class="p-sub">Open deal value, ₹ Lakh</div>
+        <div class="chart-box"><canvas id="serviceChart"></canvas></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="sec-head"><span class="eyebrow">02</span><h2>Quarter performance</h2><span class="note">what's working, what isn't</span></div>
+    <div class="grid-2">
+      <div class="panel">
+        <h3>Revenue vs target</h3>
+        <div class="p-sub">Closed-won ₹L against monthly quota</div>
+        <div class="chart-box tall"><canvas id="revChart"></canvas></div>
+      </div>
+      <div class="panel">
+        <h3>Lead channel conversion</h3>
+        <div class="p-sub">Win rate by source — referrals &amp; inbound convert best despite lower volume</div>
+        <div class="chart-box tall"><canvas id="sourceChart"></canvas></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="sec-head"><span class="eyebrow">03</span><h2>Priority deals &amp; follow-ups</h2></div>
+    <div class="table-tools">
+      ${STAGES.map(s=>`<button class="filter-btn ${activeStage===s?'active':''}" data-stage="${s}">${s}</button>`).join('')}
+      <span class="filter-count">${overdue} overdue · ${followDue} due ≤48h</span>
+    </div>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>Account</th><th>Stage</th><th class="num">Value ₹L</th><th>Source</th><th>Owner</th><th>Next follow-up</th></tr></thead>
+        <tbody id="dealBody">${dealRows()}</tbody>
+      </table>
+    </div>
+  </section>
+
+  <footer class="foot">
+    <div>
+      <h4>What this dashboard tracks</h4>
+      <ul>
+        <li>Pipeline value, forecast-weighting and win rate — the numbers a BD function is measured on</li>
+        <li>Funnel conversion stage-by-stage, to see where deals stall</li>
+        <li>Channel ROI across cold calling, email, LinkedIn, referrals, networking and inbound</li>
+        <li>Follow-up discipline — overdue and due-soon flags on every open deal</li>
+      </ul>
+    </div>
+    <div>
+      <h4>Notes</h4>
+      <p class="disclaimer">Built by Jiya Tejwani as a business-development analytics demo. Company, accounts and figures are synthetic and illustrative, modelled on a mid-size IT / software services sales motion. No real client data.</p>
+    </div>
+  </footer>`;
+
+  bind();
+  drawCharts();
+}
+
+/* ======================= CHARTS ======================= */
+function drawCharts(){
+  if(typeof Chart==='undefined')return;
+  const fg=cssVar('--fg'), dim=cssVar('--fg-dim'), grid=cssVar('--grid');
+  const accent=cssVar('--accent'), won=cssVar('--won'), warn=cssVar('--warn'), info=cssVar('--info'), lost=cssVar('--lost');
+  Chart.defaults.font.family="'IBM Plex Sans',sans-serif";
+  Chart.defaults.font.size=12.5;
+  Chart.defaults.color=dim;
+
+  // Funnel — horizontal bars
+  const fEl=document.getElementById('funnelChart');
+  if(fEl){
+    charts.push(new Chart(fEl,{type:'bar',data:{labels:FUNNEL.map(f=>f.stage),datasets:[{data:FUNNEL.map(f=>f.n),backgroundColor:FUNNEL.map((f,i)=>i===FUNNEL.length-1?won:accent),borderRadius:4,barThickness:18}]},
+      options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:(c)=>{const i=c.dataIndex;const base=FUNNEL[0].n;const pct=(c.parsed.x/base*100).toFixed(0);return `${c.parsed.x} (${pct}% of leads)`;}}}},scales:{x:{grid:{color:grid},ticks:{color:dim}},y:{grid:{display:false},ticks:{color:fg,font:{weight:'600'}}}}}}));
+  }
+  // Service line — horizontal bars
+  const sEl=document.getElementById('serviceChart');
+  if(sEl){
+    charts.push(new Chart(sEl,{type:'bar',data:{labels:serviceRows.map(r=>r[0]),datasets:[{data:serviceRows.map(r=>r[1]),backgroundColor:info,borderRadius:4,barThickness:11}]},
+      options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:(c)=>`₹${c.parsed.x}L open`}}},scales:{x:{grid:{color:grid},ticks:{color:dim}},y:{grid:{display:false},ticks:{color:fg,font:{size:11.5}}}}}}));
+  }
+  // Revenue vs target — bars + line
+  const rEl=document.getElementById('revChart');
+  if(rEl){
+    charts.push(new Chart(rEl,{data:{labels:MONTHLY.map(m=>m.m),datasets:[
+      {type:'bar',label:'Revenue (₹L)',data:MONTHLY.map(m=>m.rev),backgroundColor:accent,borderRadius:4,barThickness:24,order:2},
+      {type:'line',label:'Target (₹L)',data:MONTHLY.map(m=>m.target),borderColor:warn,backgroundColor:warn,borderWidth:2,borderDash:[5,4],pointRadius:3,pointBackgroundColor:warn,tension:0,order:1},
+    ]},
+      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:true,position:'bottom',labels:{color:dim,usePointStyle:true,pointStyleWidth:12,padding:14,font:{size:11.5}}}},scales:{x:{grid:{display:false},ticks:{color:fg}},y:{grid:{color:grid},ticks:{color:dim},beginAtZero:true}}}}));
+  }
+  // Source conversion — horizontal bars
+  const cEl=document.getElementById('sourceChart');
+  if(cEl){
+    charts.push(new Chart(cEl,{type:'bar',data:{labels:sourceByConv.map(s=>s.name),datasets:[{data:sourceByConv.map(s=>+s.conv.toFixed(1)),backgroundColor:sourceByConv.map((s,i)=>i<2?won:accent),borderRadius:4,barThickness:16}]},
+      options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:(c)=>{const s=sourceByConv[c.dataIndex];return `${c.parsed.x}% · ${s.won}/${s.leads} leads`;}}}},scales:{x:{grid:{color:grid},ticks:{color:dim,callback:v=>v+'%'}},y:{grid:{display:false},ticks:{color:fg}}}}}));
+  }
+}
+
+/* ======================= EVENTS ======================= */
+function bind(){
+  const tb=document.getElementById('themeBtn');
+  if(tb)tb.onclick=()=>{
+    const next=currentTheme()==='dark'?'light':'dark';
+    document.documentElement.setAttribute('data-theme',next);
+    try{localStorage.setItem('bd-theme',next);}catch(e){}
+    render();
+  };
+  app.querySelectorAll('[data-stage]').forEach(b=>b.onclick=()=>{
+    activeStage=b.dataset.stage;
+    app.querySelectorAll('[data-stage]').forEach(x=>x.classList.toggle('active',x.dataset.stage===activeStage));
+    const body=document.getElementById('dealBody');
+    if(body)body.innerHTML=dealRows();
+  });
+}
+
+render();
+</script>
